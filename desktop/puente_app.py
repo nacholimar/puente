@@ -112,8 +112,8 @@ class Puente:
         if self.token:
             self.session.headers["Authorization"] = f"Bearer {self.token}"
 
-        self.seen = self._load_seen()
-        self.local_paths = {}          # id -> Path local (para Abrir / Mostrar)
+        self.seen, self.local_paths = self._load_state()  # seen + id->ruta local
+        self._marked = set()           # ids ya reconciliados como bajados en el server
         self.files = []                # último listado del server
         self.jobs = queue.Queue()      # rutas a subir
         self.paused = False
@@ -133,18 +133,21 @@ class Puente:
             logline("WORKER CRASH:\n" + traceback.format_exc())
 
     # ---------------- estado ----------------
-    def _load_seen(self):
+    def _load_state(self):
         try:
             import json
-            return set(json.loads(STATE_FILE.read_text(encoding="utf-8")).get("seen", []))
+            d = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            return set(d.get("seen", [])), dict(d.get("paths", {}))
         except (OSError, ValueError):
-            return set()
+            return set(), {}
 
-    def _save_seen(self):
+    def _save_state(self):
         try:
             import json
             STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            STATE_FILE.write_text(json.dumps({"seen": sorted(self.seen)}), encoding="utf-8")
+            STATE_FILE.write_text(
+                json.dumps({"seen": sorted(self.seen), "paths": self.local_paths}),
+                encoding="utf-8")
         except OSError:
             pass
 
@@ -298,7 +301,7 @@ class Puente:
             up = self.session.post(f"{URL}/api/clip", data={"text": txt, "source": "local"}, timeout=30)
             if up.ok:
                 self.seen.add(up.json()["id"])
-                self._save_seen()
+                self._save_state()
                 self.gui(self._set_status, "Texto enviado.", 100)
             else:
                 self.gui(self._set_status, f"Error enviando texto ({up.status_code})", 0)
@@ -403,7 +406,7 @@ class Puente:
             elif f.get("downloaded"):
                 est = "bajado ✓"
             else:
-                est = "pendiente"
+                est = "sin bajar"
             self.tree.insert("", "end", iid=f["id"], values=(label, human(f["size"]), src, est))
             if f["id"] in sel:
                 self.tree.selection_add(f["id"])
@@ -447,7 +450,7 @@ class Puente:
                                  done * 100 / total)
             self.seen.add(meta["id"])
             self.local_paths[meta["id"]] = str(dest)
-            self._save_seen()
+            self._save_state()
             self._mark_downloaded(meta["id"])
             self.gui(self._set_status, f"Bajado: {dest.name}", 100)
             if then_open:
@@ -474,7 +477,7 @@ class Puente:
                 except OSError:
                     dest = path
                 self.local_paths[fid] = str(dest)
-                self._save_seen()
+                self._save_state()
                 self.gui(self._set_status, f"Enviado: {path.name}", 100)
             else:
                 self.gui(self._set_status, f"Error al enviar ({up.status_code})", 0)
@@ -506,6 +509,11 @@ class Puente:
                 files = self._poll_once()
                 for f in (files or []):
                     if f["id"] in self.seen:
+                        # ya procesado antes: si lo bajamos pero el server no lo sabe, marcarlo
+                        if (f.get("source") != "local" and f.get("kind") != "text"
+                                and not f.get("downloaded") and f["id"] not in self._marked):
+                            self._marked.add(f["id"])
+                            self._mark_downloaded(f["id"])
                         continue
                     if f.get("source") == "local":
                         self.seen.add(f["id"])

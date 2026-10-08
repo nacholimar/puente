@@ -404,7 +404,7 @@ function render(){
         : `<button class="open">abrir</button> <button class="del">borrar</button>`;
       const estado = f.source==="local"
         ? `<span class="muted">—</span>`
-        : (f.downloaded ? `<span class="tag ok">✓ bajado</span>` : `<span class="muted">pendiente</span>`);
+        : (f.downloaded ? `<span class="tag ok">✓ bajado</span>` : `<span class="muted">sin bajar</span>`);
       const tr=document.createElement("tr");
       tr.innerHTML=`<td>${nameCell}</td>
         <td class="muted" style="white-space:nowrap">${fmtSize(f.size)}</td>
