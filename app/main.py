@@ -141,9 +141,21 @@ async def upload(request: Request, file: UploadFile = File(...), source: str = F
         "size": size,
         "source": "local" if source == "local" else "web",
         "uploaded_at": time.time(),
+        "downloaded": False,
     }
     _meta_path(fid).write_text(json.dumps(meta), encoding="utf-8")
     return meta
+
+
+@app.post("/api/files/{fid}/downloaded")
+def mark_downloaded(request: Request, fid: str):
+    require_token(request)
+    meta = _load_meta(fid)
+    if not meta:
+        raise HTTPException(404, "No existe.")
+    meta["downloaded"] = True
+    _meta_path(fid).write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    return {"ok": True}
 
 
 @app.post("/api/clip")
@@ -162,6 +174,7 @@ async def clip(request: Request, text: str = Form(...), source: str = Form("web"
         "size": len(text.encode("utf-8")),
         "source": "local" if source == "local" else "web",
         "uploaded_at": time.time(),
+        "downloaded": False,
     }
     _meta_path(fid).write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
     return meta
@@ -232,6 +245,7 @@ PAGE = r"""<!doctype html>
   th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; opacity: .6; }
   a.dl { text-decoration: none; font-weight: 600; }
   .tag { font-size: .68rem; padding: 1px 7px; border-radius: 999px; border: 1px solid rgba(125,125,125,.4); opacity: .8; }
+  .tag.ok { color: #2e8b57; border-color: #2e8b57; opacity: 1; }
   button { font: inherit; cursor: pointer; border: 1px solid rgba(125,125,125,.4);
            background: transparent; color: inherit; border-radius: 8px; padding: 4px 10px; }
   .row-act { opacity: .6; }
@@ -388,11 +402,15 @@ function render(){
       const actions = isText
         ? `<button class="copy">copiar</button> <button class="del">borrar</button>`
         : `<button class="open">abrir</button> <button class="del">borrar</button>`;
+      const estado = f.source==="local"
+        ? `<span class="muted">—</span>`
+        : (f.downloaded ? `<span class="tag ok">✓ bajado</span>` : `<span class="muted">pendiente</span>`);
       const tr=document.createElement("tr");
       tr.innerHTML=`<td>${nameCell}</td>
         <td class="muted" style="white-space:nowrap">${fmtSize(f.size)}</td>
         <td class="muted" style="white-space:nowrap" title="${fmtDate(f.uploaded_at)}">${fmtDate(f.uploaded_at)}</td>
         <td><span class="tag">${f.source==="local"?"local":"VDI/web"}</span></td>
+        <td style="white-space:nowrap">${estado}</td>
         <td class="row-act" style="white-space:nowrap">${actions}</td>`;
       if(isText){
         tr.querySelector(".copy").onclick=async(e)=>{

@@ -113,6 +113,10 @@ def main():
                         for chunk in dl.iter_content(1024 * 256):
                             out.write(chunk)
                 seen.add(f["id"]); save_state()
+                try:
+                    s.post(f"{args.url}/api/files/{f['id']}/downloaded", timeout=15)
+                except requests.RequestException:
+                    pass
                 log(f"  bajado: {dest.name}")
 
             # --- subir lo que haya en outbox ---

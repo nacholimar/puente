@@ -180,14 +180,16 @@ class Puente:
         self.cliptext.pack(side="left", fill="x", expand=True)
         ttk.Button(clip, text="Enviar texto", command=self._send_text).pack(side="left", padx=(8, 0))
 
-        cols = ("name", "size", "src")
+        cols = ("name", "size", "src", "estado")
         self.tree = ttk.Treeview(self.root, columns=cols, show="headings", height=10)
         self.tree.heading("name", text="Archivo")
         self.tree.heading("size", text="Tamaño")
         self.tree.heading("src", text="Origen")
-        self.tree.column("name", width=380)
-        self.tree.column("size", width=90, anchor="e")
-        self.tree.column("src", width=90, anchor="center")
+        self.tree.heading("estado", text="Estado")
+        self.tree.column("name", width=320)
+        self.tree.column("size", width=80, anchor="e")
+        self.tree.column("src", width=80, anchor="center")
+        self.tree.column("estado", width=90, anchor="center")
         self.tree.pack(fill="both", expand=True, padx=12)
         self.tree.bind("<Double-1>", lambda e: self._open_sel())
 
@@ -396,7 +398,13 @@ class Puente:
         for f in sorted(files, key=lambda x: x.get("uploaded_at", 0), reverse=True):
             src = "local" if f.get("source") == "local" else "VDI/web"
             label = ("📝 " if f.get("kind") == "text" else "") + f["name"]
-            self.tree.insert("", "end", iid=f["id"], values=(label, human(f["size"]), src))
+            if f.get("source") == "local":
+                est = "—"
+            elif f.get("downloaded"):
+                est = "bajado ✓"
+            else:
+                est = "pendiente"
+            self.tree.insert("", "end", iid=f["id"], values=(label, human(f["size"]), src, est))
             if f["id"] in sel:
                 self.tree.selection_add(f["id"])
 
@@ -418,6 +426,12 @@ class Puente:
             self.gui(self.conn.config, {"text": "sin conexión", "foreground": "#c0392b"})
             return None
 
+    def _mark_downloaded(self, fid):
+        try:
+            self.session.post(f"{URL}/api/files/{fid}/downloaded", timeout=15)
+        except requests.RequestException:
+            pass
+
     def _download(self, meta, then_open=False):
         dest = unique(INBOX / meta["name"])
         try:
@@ -434,6 +448,7 @@ class Puente:
             self.seen.add(meta["id"])
             self.local_paths[meta["id"]] = str(dest)
             self._save_seen()
+            self._mark_downloaded(meta["id"])
             self.gui(self._set_status, f"Bajado: {dest.name}", 100)
             if then_open:
                 os.startfile(dest)
@@ -498,6 +513,7 @@ class Puente:
                     if f.get("kind") == "text":   # texto recibido: copiar solo al portapapeles
                         self.gui(self._set_clipboard, f.get("text", ""), f.get("name", ""))
                         self.seen.add(f["id"])
+                        self._mark_downloaded(f["id"])
                         continue
                     self._download(f)
             time.sleep(0.4)
