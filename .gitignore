@@ -1,0 +1,17 @@
+# Secretos y config local — NUNCA commitear
+.env
+.keys
+
+# Datos y estado en runtime
+data/
+sync/state.json
+*.log
+
+# Temporales de prueba
+.smoke/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

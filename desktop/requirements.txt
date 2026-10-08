@@ -1,0 +1,4 @@
+requests>=2.31
+pystray>=0.19
+Pillow>=10
+tkinterdnd2>=0.4

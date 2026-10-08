@@ -1,0 +1,10 @@
+.venv/
+venv/
+data/
+.git/
+__pycache__/
+*.pyc
+.dockerignore
+.gitignore
+README.md
+sync/
